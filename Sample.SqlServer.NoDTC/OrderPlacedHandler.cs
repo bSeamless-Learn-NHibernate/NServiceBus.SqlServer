@@ -1,7 +1,6 @@
 using System;
 using NServiceBus;
 using NServiceBus.Persistence.NHibernate;
-using Order = Sample.SqlServer.NoDTC.Entities.Order;
 
 namespace Sample.SqlServer.NoDTC
 {

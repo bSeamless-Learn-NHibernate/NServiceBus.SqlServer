@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Configuration;
 using NHibernate.Cfg;
-using NHibernate.Cfg.MappingSchema;
 using NHibernate.Mapping.ByCode;
 using NServiceBus;
 using NServiceBus.Persistence;
@@ -12,17 +11,18 @@ namespace Sample.SqlServer.NoDTC
 {
     class ConfigurePersistence : INeedInitialization
     {
-        public void Init(Configure config)
+        public void Customize(BusConfiguration config)
         {
-            Configuration configuration = BuildConfiguration();
+            var configuration = BuildConfiguration();
 
             config
-                .UsePersistence<NServiceBus.NHibernate>(c => c.UseConfiguration(configuration));
+                .UsePersistence<NHibernatePersistence>()
+                .UseConfiguration(configuration);
         }
 
         private static Configuration BuildConfiguration()
         {
-            Configuration configuration = new Configuration()
+            var configuration = new Configuration()
                 .SetProperties(new Dictionary<string, string>
                 {
                     {
@@ -37,7 +37,7 @@ namespace Sample.SqlServer.NoDTC
 
             var mapper = new ModelMapper();
             mapper.AddMapping<OrderMap>();
-            HbmMapping mappings = mapper.CompileMappingForAllExplicitlyAddedEntities();
+            var mappings = mapper.CompileMappingForAllExplicitlyAddedEntities();
             configuration.AddMapping(mappings);
 
             return configuration;

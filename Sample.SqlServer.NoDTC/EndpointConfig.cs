@@ -2,10 +2,11 @@ using NServiceBus;
 
 namespace Sample.SqlServer.NoDTC
 {
-    public class EndpointConfig : IConfigureThisEndpoint, AsA_Server, UsingTransport<NServiceBus.SqlServer>
+    public class EndpointConfig : IConfigureThisEndpoint, AsA_Server
     {
-        public void Customize(ConfigurationBuilder builder)
+        public void Customize(BusConfiguration configuration)
         {
+            configuration.UseTransport<SqlServerTransport>();
         }
     }
 }
