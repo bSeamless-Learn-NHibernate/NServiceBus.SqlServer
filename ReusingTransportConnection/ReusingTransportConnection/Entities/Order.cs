@@ -1,7 +1,7 @@
 ﻿using NHibernate.Mapping.ByCode;
 using NHibernate.Mapping.ByCode.Conformist;
 
-namespace Sample.SqlServer.NoDTC.Entities
+namespace ReusingTransportConnection.Entities
 {
     internal class Order
     {

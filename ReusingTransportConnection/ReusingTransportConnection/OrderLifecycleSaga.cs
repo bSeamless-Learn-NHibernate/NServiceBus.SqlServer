@@ -1,12 +1,12 @@
 using System;
 using NServiceBus.Persistence.NHibernate;
 using NServiceBus.Saga;
-using Sample.SqlServer.NoDTC.Entities;
+using ReusingTransportConnection.Entities;
 
-namespace Sample.SqlServer.NoDTC
+namespace ReusingTransportConnection
 {
-    internal class SaveOrder : Saga<SaveOrder.OrderData>, IAmStartedByMessages<NewOrder>,
-        IHandleTimeouts<BuyersRemorseIsOver>
+    internal class OrderLifecycleSaga : Saga<OrderLifecycleSaga.OrderData>, IAmStartedByMessages<NewOrder>,
+        IHandleTimeouts<ProcessingCompleted>
     {
         public NHibernateStorageContext NHibernateStorageContext { get; set; }
 
@@ -14,16 +14,19 @@ namespace Sample.SqlServer.NoDTC
         {
             Console.Out.WriteLine("Processing order");
 
-            RequestTimeout(TimeSpan.FromSeconds(5), new BuyersRemorseIsOver());
+            #region OrderProcessing
+            RequestTimeout(TimeSpan.FromSeconds(5), new ProcessingCompleted());
 
             Data.Product = message.Product;
             Data.Quantity = message.Quantity;
+            #endregion
         }
 
-        public void Timeout(BuyersRemorseIsOver state)
+        public void Timeout(ProcessingCompleted state)
         {
             Console.Out.WriteLine("Order fulfilled");
 
+            #region NotifyFulfilled
             var order = new Order
             {
                 Product = Data.Product,
@@ -32,10 +35,11 @@ namespace Sample.SqlServer.NoDTC
 
             NHibernateStorageContext.Session.Save(order);
 
-            Bus.Reply(new OrderPlaced
+            Bus.Publish(new OrderFulfilled
             {
                 OrderId = order.Id,
             });
+            #endregion
 
             MarkAsComplete();
         }
@@ -49,9 +53,5 @@ namespace Sample.SqlServer.NoDTC
             public virtual int Quantity { get; set; }
             public virtual string Product { get; set; }
         }
-    }
-
-    internal class BuyersRemorseIsOver
-    {
     }
 }

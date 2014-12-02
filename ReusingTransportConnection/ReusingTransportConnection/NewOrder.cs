@@ -1,6 +1,6 @@
 using NServiceBus;
 
-namespace Sample.SqlServer.NoDTC
+namespace ReusingTransportConnection
 {
     internal class NewOrder : ICommand
     {

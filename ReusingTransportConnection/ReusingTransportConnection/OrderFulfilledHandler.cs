@@ -2,21 +2,21 @@ using System;
 using NServiceBus;
 using NServiceBus.Persistence.NHibernate;
 
-namespace Sample.SqlServer.NoDTC
+namespace ReusingTransportConnection
 {
-    internal class OrderPlacedHandler : IHandleMessages<OrderPlaced>
+    internal class OrderFulfilledHandler : IHandleMessages<OrderFulfilled>
     {
         public NHibernateStorageContext NHibernateStorageContext { get; set; }
 
-        public void Handle(OrderPlaced message)
+        public void Handle(OrderFulfilled message)
         {
             Console.Out.WriteLine("Order #{0} being shipped now", message.OrderId);
 
+            #region Ship
             var order = NHibernateStorageContext.Session.Get<Entities.Order>(message.OrderId);
 
             order.Shipped = true;
-
-            NHibernateStorageContext.Session.Update(order);
+            #endregion
         }
     }
 }

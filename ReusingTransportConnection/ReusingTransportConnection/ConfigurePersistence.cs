@@ -4,20 +4,22 @@ using NHibernate.Cfg;
 using NHibernate.Mapping.ByCode;
 using NServiceBus;
 using NServiceBus.Persistence;
-using Sample.SqlServer.NoDTC.Entities;
+using ReusingTransportConnection.Entities;
 using Configuration = NHibernate.Cfg.Configuration;
 
-namespace Sample.SqlServer.NoDTC
+namespace ReusingTransportConnection
 {
     class ConfigurePersistence : INeedInitialization
     {
         public void Customize(BusConfiguration config)
         {
+            #region Persistence
             var configuration = BuildConfiguration();
 
             config
                 .UsePersistence<NHibernatePersistence>()
                 .UseConfiguration(configuration);
+            #endregion
         }
 
         private static Configuration BuildConfiguration()

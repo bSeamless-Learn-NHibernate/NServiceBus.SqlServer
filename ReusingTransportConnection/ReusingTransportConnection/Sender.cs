@@ -1,7 +1,7 @@
 using System;
 using NServiceBus;
 
-namespace Sample.SqlServer.NoDTC
+namespace ReusingTransportConnection
 {
     internal class Sender : IWantToRunWhenBusStartsAndStops
     {
@@ -16,7 +16,9 @@ namespace Sample.SqlServer.NoDTC
             {
                 if (key == ConsoleKey.Enter)
                 {
+                    #region Sender
                     Bus.SendLocal(new NewOrder { Product = "iPhone 4S", Quantity = 5 });
+                    #endregion
                 }
             }
         }
