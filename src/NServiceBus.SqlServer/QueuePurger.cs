@@ -15,7 +15,7 @@ namespace NServiceBus.Transports.SQLServer
             this.secondaryReceiveConfiguration = secondaryReceiveConfiguration;
         }
 
-        public void Purge(Address address)
+        public void Purge(string address)
         {
             Purge(AllTables(address));
         }
@@ -41,9 +41,9 @@ namespace NServiceBus.Transports.SQLServer
             }
         }
 
-        IEnumerable<string> AllTables(Address address)
+        IEnumerable<string> AllTables(string address)
         {
-            var settings = secondaryReceiveConfiguration.GetSettings(address.Queue);
+            var settings = secondaryReceiveConfiguration.GetSettings(address);
             yield return address.GetTableName();
             if (settings.IsEnabled)
             {

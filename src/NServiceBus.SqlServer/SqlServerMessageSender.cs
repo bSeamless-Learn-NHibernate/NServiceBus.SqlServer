@@ -27,18 +27,18 @@
                 SetCallbackAddress(message);
             
                 var connectionInfo = ConnectionStringProvider.GetForDestination(sendOptions.Destination);
-                var queue = new TableBasedQueue(destination, connectionInfo.Schema);
+                var queue = new TableBasedQueue(destination.Queue, connectionInfo.Schema);
                 if (sendOptions.EnlistInReceiveTransaction)
                 {
                     SqlTransaction currentTransaction;
-                    if (PipelineExecutor.TryGetTransaction(connectionInfo.ConnectionString, out currentTransaction))
+                    if (PipelineExecutor.CurrentContext.TryGetTransaction(connectionInfo.ConnectionString, out currentTransaction))
                     {
                         queue.Send(message, sendOptions, currentTransaction.Connection, currentTransaction);
                     }
                     else
                     {
                         SqlConnection currentConnection;
-                        if (PipelineExecutor.TryGetConnection(connectionInfo.ConnectionString, out currentConnection))
+                        if (PipelineExecutor.CurrentContext.TryGetConnection(connectionInfo.ConnectionString, out currentConnection))
                         {
                             queue.Send(message, sendOptions, currentConnection);
                         }

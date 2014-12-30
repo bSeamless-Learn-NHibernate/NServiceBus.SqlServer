@@ -3,6 +3,7 @@ namespace NServiceBus.Features
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Transactions;
     using NServiceBus.ObjectBuilder;
     using Pipeline;
     using Settings;
@@ -33,6 +34,28 @@ namespace NServiceBus.Features
             get { return @"Data Source=.\SQLEXPRESS;Initial Catalog=nservicebus;Integrated Security=True"; }
         }
 
+        protected override RegisterStep GetReceiveBehaviorRegistration(ReadOnlySettings settings)
+        {
+            var errorQueue = ErrorQueueSettings.GetConfiguredErrorQueue(settings).Queue;
+            var isTransactional =  settings.Get<bool>("Transactions.Enabled");
+            var suppressDistributedTransactions = settings.Get<bool>("Transactions.SuppressDistributedTransactions");
+            var transactionOptions = new TransactionOptions
+            {
+                IsolationLevel = settings.Get<IsolationLevel>("Transactions.IsolationLevel"),
+                Timeout = settings.Get<TimeSpan>("Transactions.DefaultTimeout")
+            };
+
+            if (isTransactional)
+            {
+                if (suppressDistributedTransactions)
+                {
+                    return new NativeTransactionReceiveBehavior.Registration(errorQueue, transactionOptions);
+                }
+                return new AmbientTransactionReceiveBehavior.Registration(errorQueue, transactionOptions);
+            }
+            return new NoTransactionReceiveBehavior.Registration(errorQueue);
+        }
+
         protected override string GetLocalAddress(ReadOnlySettings settings)
         {
             return settings.EndpointName();
@@ -53,32 +76,24 @@ namespace NServiceBus.Features
             var connectionString = connectionStringWithSchema.ExtractSchemaName(out configStringSchema);
 
             var localConnectionParams = new ConnectionParams(null, configStringSchema, connectionString, defaultSchema);
+            context.Container.RegisterSingleton(localConnectionParams);
 
             var useCallbackReceiver = context.Settings.Get<bool>(UseCallbackReceiverSettingKey);
             var maxConcurrencyForCallbackReceiver = context.Settings.Get<int>(MaxConcurrencyForCallbackReceiverSettingKey);
 
             var queueName = GetLocalAddress(context.Settings);
             var callbackQueue = string.Format("{0}.{1}", queueName, RuntimeEnvironment.MachineName);
-            var errorQueue = ErrorQueueSettings.GetConfiguredErrorQueue(context.Settings);
 
             var connectionStringProvider = ConfigureConnectionStringProvider(context, localConnectionParams);
 
             var container = context.Container;
 
-            container.ConfigureComponent<TransportNotifications>(DependencyLifecycle.SingleInstance);
-
-            container.ConfigureComponent<SqlServerQueueCreator>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.ConnectionInfo, localConnectionParams);
+            container.ConfigureComponent<SqlServerQueueCreator>(DependencyLifecycle.InstancePerCall);
 
             var senderConfig = container.ConfigureComponent<SqlServerMessageSender>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.ConnectionStringProvider, connectionStringProvider);
 
-            container.ConfigureComponent<ReceiveStrategyFactory>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.ErrorQueue, errorQueue)
-                .ConfigureProperty(p => p.ConnectionInfo, localConnectionParams);
-
-            container.ConfigureComponent<SqlServerPollingDequeueStrategy>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.SchemaName, localConnectionParams.Schema);
+            container.ConfigureComponent<SqlServerPollingDequeueStrategy>(DependencyLifecycle.InstancePerCall);
 
             ConfigurePurging(context.Settings, container, localConnectionParams);
 

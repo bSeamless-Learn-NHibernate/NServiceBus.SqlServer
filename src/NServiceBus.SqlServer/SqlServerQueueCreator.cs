@@ -5,6 +5,13 @@ namespace NServiceBus.Transports.SQLServer
 
     class SqlServerQueueCreator : ICreateQueues
     {
+        readonly ConnectionParams localConnectionParams;
+
+        public SqlServerQueueCreator(ConnectionParams localConnectionParams)
+        {
+            this.localConnectionParams = localConnectionParams;
+        }
+
         const string Ddl =
             @"IF NOT  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{0}].[{1}]') AND type in (N'U'))
                   BEGIN
@@ -28,9 +35,9 @@ namespace NServiceBus.Transports.SQLServer
 
         public void CreateQueueIfNecessary(Address address, string account)
         {
-            using (var connection = new SqlConnection(ConnectionInfo.ConnectionString))
+            using (var connection = new SqlConnection(localConnectionParams.ConnectionString))
             {
-                var sql = string.Format(Ddl, ConnectionInfo.Schema, address.GetTableName());
+                var sql = string.Format(Ddl, localConnectionParams.Schema, address.GetTableName());
                 connection.Open();
 
                 using (var command = new SqlCommand(sql, connection) {CommandType = CommandType.Text})
@@ -39,7 +46,5 @@ namespace NServiceBus.Transports.SQLServer
                 }
             }
         }
-
-        public ConnectionParams ConnectionInfo { get; set; }
     }
 }
