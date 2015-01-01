@@ -5,10 +5,10 @@
 
     class CollectionConnectionStringProvider : IConnectionStringProvider
     {
-        readonly ConnectionParams defaultConnectionParams;
+        readonly LocalConnectionParams defaultConnectionParams;
         readonly IEnumerable<EndpointConnectionInfo> connectionStrings;
 
-        public CollectionConnectionStringProvider(IEnumerable<EndpointConnectionInfo> connectionStrings, ConnectionParams defaultConnectionParams)
+        public CollectionConnectionStringProvider(IEnumerable<EndpointConnectionInfo> connectionStrings, LocalConnectionParams defaultConnectionParams)
         {
             this.defaultConnectionParams = defaultConnectionParams;
             this.connectionStrings = connectionStrings.ToList();

@@ -7,12 +7,11 @@ namespace NServiceBus.Transports.SQLServer
     using NServiceBus.Logging;
 
     class QueuePurger : IQueuePurger
-    {
-        public ConnectionParams ConnectionInfo { get; set; }
-
-        public QueuePurger(SecondaryReceiveConfiguration secondaryReceiveConfiguration)
+    {   
+        public QueuePurger(SecondaryReceiveConfiguration secondaryReceiveConfiguration, LocalConnectionParams localConnectionParams)
         {
             this.secondaryReceiveConfiguration = secondaryReceiveConfiguration;
+            this.localConnectionParams = localConnectionParams;
         }
 
         public void Purge(string address)
@@ -22,13 +21,13 @@ namespace NServiceBus.Transports.SQLServer
 
         void Purge(IEnumerable<string> tableNames)
         {
-            using (var connection = new SqlConnection(ConnectionInfo.ConnectionString))
+            using (var connection = new SqlConnection(localConnectionParams.ConnectionString))
             {
                 connection.Open();
 
                 foreach (var tableName in tableNames)
                 {
-                    using (var command = new SqlCommand(string.Format(SqlPurge, ConnectionInfo.Schema, tableName), connection)
+                    using (var command = new SqlCommand(string.Format(SqlPurge, localConnectionParams.Schema, tableName), connection)
                     {
                         CommandType = CommandType.Text
                     })
@@ -56,5 +55,6 @@ namespace NServiceBus.Transports.SQLServer
         static readonly ILog Logger = LogManager.GetLogger(typeof(QueuePurger));
 
         readonly SecondaryReceiveConfiguration secondaryReceiveConfiguration;
+        readonly LocalConnectionParams localConnectionParams;
     }
 }

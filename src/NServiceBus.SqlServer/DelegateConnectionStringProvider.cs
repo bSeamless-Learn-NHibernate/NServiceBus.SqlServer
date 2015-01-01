@@ -5,9 +5,9 @@ namespace NServiceBus.Transports.SQLServer
     class DelegateConnectionStringProvider : IConnectionStringProvider
     {
         readonly Func<string, ConnectionInfo> connectionStringProvider;
-        readonly ConnectionParams defaultConnectionParams;
+        readonly LocalConnectionParams defaultConnectionParams;
 
-        public DelegateConnectionStringProvider(Func<string, ConnectionInfo> connectionStringProvider, ConnectionParams defaultConnectionParams)
+        public DelegateConnectionStringProvider(Func<string, ConnectionInfo> connectionStringProvider, LocalConnectionParams defaultConnectionParams)
         {
             this.connectionStringProvider = connectionStringProvider;
             this.defaultConnectionParams = defaultConnectionParams;

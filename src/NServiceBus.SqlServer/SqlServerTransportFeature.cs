@@ -2,6 +2,7 @@ namespace NServiceBus.Features
 {
     using System;
     using System.Collections.Generic;
+    using System.ComponentModel;
     using System.Linq;
     using System.Transactions;
     using NServiceBus.ObjectBuilder;
@@ -15,17 +16,19 @@ namespace NServiceBus.Features
     class SqlServerTransportFeature : ConfigureTransport
     {
         public const string UseCallbackReceiverSettingKey = "SqlServer.UseCallbackReceiver";
-        public const string MaxConcurrencyForCallbackReceiverSettingKey = "SqlServer.MaxConcurrencyForCallbackReceiver";
         public const string PerEndpointConnectionStringsCollectionSettingKey = "SqlServer.PerEndpointConnectrionStringsCollection";
         public const string PerEndpointConnectionStringsCallbackSettingKey = "SqlServer.PerEndpointConnectrionStringsCallback";
         public const string DefaultSchemaSettingsKey = "SqlServer.SchemaName";
+        public const string PrimaryPollIntervalSettingsKey = "SqlServer.PrimaryPollInterval";
+        public const string SecondaryPollIntervalSettingsKey = "SqlServer.SecondaryPollInterval";
 
         public SqlServerTransportFeature()
         {
             Defaults(s =>
             {
                 s.SetDefault(UseCallbackReceiverSettingKey, true);
-                s.SetDefault(MaxConcurrencyForCallbackReceiverSettingKey, 1);
+                s.SetDefault(PrimaryPollIntervalSettingsKey, 1000);
+                s.SetDefault(SecondaryPollIntervalSettingsKey, 2000);
             });
         }
 
@@ -34,26 +37,23 @@ namespace NServiceBus.Features
             get { return @"Data Source=.\SQLEXPRESS;Initial Catalog=nservicebus;Integrated Security=True"; }
         }
 
-        protected override RegisterStep GetReceiveBehaviorRegistration(ReadOnlySettings settings)
+        protected override RegisterStep GetReceiveBehaviorRegistration(ReceiveOptions receiveOptions)
         {
-            var errorQueue = ErrorQueueSettings.GetConfiguredErrorQueue(settings).Queue;
-            var isTransactional =  settings.Get<bool>("Transactions.Enabled");
-            var suppressDistributedTransactions = settings.Get<bool>("Transactions.SuppressDistributedTransactions");
             var transactionOptions = new TransactionOptions
             {
-                IsolationLevel = settings.Get<IsolationLevel>("Transactions.IsolationLevel"),
-                Timeout = settings.Get<TimeSpan>("Transactions.DefaultTimeout")
+                IsolationLevel = receiveOptions.Transactions.IsolationLevel,
+                Timeout = receiveOptions.Transactions.TransactionTimeout
             };
 
-            if (isTransactional)
+            if (receiveOptions.Transactions.IsTransactional)
             {
-                if (suppressDistributedTransactions)
+                if (receiveOptions.Transactions.SuppressDistributedTransactions)
                 {
-                    return new NativeTransactionReceiveBehavior.Registration(errorQueue, transactionOptions);
+                    return new NativeTransactionReceiveBehavior.Registration(receiveOptions.ErrorQueue, transactionOptions);
                 }
-                return new AmbientTransactionReceiveBehavior.Registration(errorQueue, transactionOptions);
+                return new AmbientTransactionReceiveBehavior.Registration(receiveOptions.ErrorQueue, transactionOptions);
             }
-            return new NoTransactionReceiveBehavior.Registration(errorQueue);
+            return new NoTransactionReceiveBehavior.Registration(receiveOptions.ErrorQueue);
         }
 
         protected override string GetLocalAddress(ReadOnlySettings settings)
@@ -75,11 +75,13 @@ namespace NServiceBus.Features
             string configStringSchema;
             var connectionString = connectionStringWithSchema.ExtractSchemaName(out configStringSchema);
 
-            var localConnectionParams = new ConnectionParams(null, configStringSchema, connectionString, defaultSchema);
+            var primaryPollInterval = GetSetting<int>(context.Settings, PrimaryPollIntervalSettingsKey);
+            var secondaryPollInterval = GetSetting<int>(context.Settings, SecondaryPollIntervalSettingsKey);
+
+            var localConnectionParams = new LocalConnectionParams(configStringSchema, connectionString, defaultSchema, primaryPollInterval, secondaryPollInterval);
             context.Container.RegisterSingleton(localConnectionParams);
 
             var useCallbackReceiver = context.Settings.Get<bool>(UseCallbackReceiverSettingKey);
-            var maxConcurrencyForCallbackReceiver = context.Settings.Get<int>(MaxConcurrencyForCallbackReceiverSettingKey);
 
             var queueName = GetLocalAddress(context.Settings);
             var callbackQueue = string.Format("{0}.{1}", queueName, RuntimeEnvironment.MachineName);
@@ -95,7 +97,7 @@ namespace NServiceBus.Features
 
             container.ConfigureComponent<SqlServerPollingDequeueStrategy>(DependencyLifecycle.InstancePerCall);
 
-            ConfigurePurging(context.Settings, container, localConnectionParams);
+            ConfigurePurging(context.Settings, container);
 
             context.Container.ConfigureComponent(b => new SqlServerStorageContext(b.Build<PipelineExecutor>(), localConnectionParams.ConnectionString), DependencyLifecycle.InstancePerUnitOfWork);
 
@@ -119,11 +121,22 @@ namespace NServiceBus.Features
                     return SecondaryReceiveSettings.Disabled();
                 }
 
-                return SecondaryReceiveSettings.Enabled(callbackQueue, maxConcurrencyForCallbackReceiver);
+                return SecondaryReceiveSettings.Enabled(callbackQueue);
             }));
         }
 
-        static CompositeConnectionStringProvider ConfigureConnectionStringProvider(FeatureConfigurationContext context, ConnectionParams defaultConnectionParams)
+        static T GetSetting<T>(ReadOnlySettings settings, string key)
+        {
+            var stringValue = ConfigurationManager.AppSettings.Get("NServiceBus/" + key.Replace(".", "/"));
+            if (stringValue != null)
+            {
+                var converter = TypeDescriptor.GetConverter(typeof(T));
+                return (T)converter.ConvertFromInvariantString(stringValue);
+            }
+            return settings.GetOrDefault<T>(key);
+        }
+
+        static CompositeConnectionStringProvider ConfigureConnectionStringProvider(FeatureConfigurationContext context, LocalConnectionParams defaultConnectionParams)
         {
             const string transportConnectionStringPrefix = "NServiceBus/Transport/";
             var configConnectionStrings =
@@ -150,7 +163,7 @@ namespace NServiceBus.Features
             return connectionStringProvider;
         }
 
-        static IConnectionStringProvider CreateProgrammaticPerEndpointConnectionStringProvider(FeatureConfigurationContext context, ConnectionParams defaultConnectionParams)
+        static IConnectionStringProvider CreateProgrammaticPerEndpointConnectionStringProvider(FeatureConfigurationContext context, LocalConnectionParams defaultConnectionParams)
         {
             var collection = context.Settings.GetOrDefault<IEnumerable<EndpointConnectionInfo>>(PerEndpointConnectionStringsCollectionSettingKey);
             if (collection != null)
@@ -165,13 +178,12 @@ namespace NServiceBus.Features
             return new NullConnectionStringProvider();
         }
 
-        static void ConfigurePurging(ReadOnlySettings settings, IConfigureComponents container, ConnectionParams connectionParams)
+        static void ConfigurePurging(ReadOnlySettings settings, IConfigureComponents container)
         {
             bool purgeOnStartup;
             if (settings.TryGet("Transport.PurgeOnStartup", out purgeOnStartup) && purgeOnStartup)
             {
-                container.ConfigureComponent<QueuePurger>(DependencyLifecycle.SingleInstance)
-                    .ConfigureProperty(p => p.ConnectionInfo, connectionParams);
+                container.ConfigureComponent<QueuePurger>(DependencyLifecycle.SingleInstance);
             }
             else
             {
